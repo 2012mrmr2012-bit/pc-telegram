@@ -40,12 +40,37 @@ def auth_device(authorization: str = Header(None)):
 # ---------- Endpoints يستخدمها الـ Agent ----------
 
 @app.post("/pair")
-def pair(req: PairRequest):
+async def pair(req: PairRequest):
     """الـ Agent يبعت الكود اللي كتبه المستخدم + معرف الجهاز، فيرجع توكن دائم."""
     data, error = db.consume_pairing_code(req.code, req.device_id, req.device_name)
     if error:
         raise HTTPException(400, error)
+
+    # إرسال إشعار فوري على تليجرام وفتح لوحة التحكم
+    chat_id = data.get("chat_id")
+    if chat_id:
+        try:
+            from bot import bot, get_main_menu_keyboard, MAIN_REPLY_KEYBOARD
+            await bot.send_message(
+                chat_id=chat_id,
+                text=(
+                    f"🎉 *تم ربط جهاز الكمبيوتر بنجاح!*\n"
+                    f"🖥️ اسم الجهاز: `{req.device_name}`\n\n"
+                    "👇 تم تفعيل لوحة التحكم، يمكنك الآن إدارة الكمبيوتر مباشرة:"
+                ),
+                parse_mode="Markdown",
+                reply_markup=get_main_menu_keyboard()
+            )
+            await bot.send_message(
+                chat_id=chat_id,
+                text="💡 لوحة التحكم متاحة دائماً أيضاً من الزرار بالأسفل.",
+                reply_markup=MAIN_REPLY_KEYBOARD
+            )
+        except Exception as e:
+            print(f"Error sending pairing notification: {e}")
+
     return data
+
 
 
 @app.get("/poll")
