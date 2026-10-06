@@ -64,7 +64,10 @@ def get_main_menu_keyboard():
         ],
         [
             InlineKeyboardButton(text="🔄 مدخل الشاشة (DP / HDMI)", callback_data="menu_switch"),
-            InlineKeyboardButton(text="🖥️ إطفاء الشاشة", callback_data="btn_monitoroff"),
+        ],
+        [
+            InlineKeyboardButton(text="🌑 إطفاء / سكون الشاشة", callback_data="btn_monitoroff"),
+            InlineKeyboardButton(text="☀️ تشغيل الشاشة", callback_data="btn_monitoron"),
         ],
         [
             InlineKeyboardButton(text="🌐 الشبكة (IP)", callback_data="btn_network"),
@@ -552,6 +555,7 @@ async def handle_callback_buttons(callback: CallbackQuery):
         "btn_mute": ("mute", None),
         "btn_unmute": ("unmute", None),
         "btn_monitoroff": ("monitoroff", None),
+        "btn_monitoron": ("monitoron", None),
         "btn_network": ("network", None),
         "btn_netinfo": ("netinfo", None),
         "btn_wifi_on": ("wifi", {"state": "on"}),
