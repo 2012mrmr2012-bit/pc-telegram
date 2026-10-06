@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: telegram-remote-admin
+    env: python
+    region: frankfurt
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python start_server.py
+    envVars:
+      - key: BOT_TOKEN
+        value: 8817646680:AAGfUAyOyHvxdhxPXlLDVe9p8pkCUqWrGUM
+      - key: PORT
+        value: 8000
