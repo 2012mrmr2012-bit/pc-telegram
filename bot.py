@@ -35,12 +35,20 @@ dp = Dispatcher()
 
 db.init_db()
 
-# الكيبورد الثابت في الأسفل — أزرار سريعة للأوامر الأكثر استخداماً
+# الكيبورد الثابت في الأسفل — كل الأوامر المتاحة
 MAIN_REPLY_KEYBOARD = ReplyKeyboardMarkup(
     keyboard=[
         [
             KeyboardButton(text="📸 لقطة شاشة"),
             KeyboardButton(text="📊 حالة الجهاز"),
+        ],
+        [
+            KeyboardButton(text="🔋 البطارية"),
+            KeyboardButton(text="⚡ العمليات والرام"),
+        ],
+        [
+            KeyboardButton(text="🌐 الشبكة"),
+            KeyboardButton(text="📡 تفاصيل الشبكة"),
         ],
         [
             KeyboardButton(text="🌑 إطفاء الشاشة"),
@@ -51,11 +59,23 @@ MAIN_REPLY_KEYBOARD = ReplyKeyboardMarkup(
             KeyboardButton(text="🔔 فك الكتم"),
         ],
         [
-            KeyboardButton(text="🔒 قفل الجهاز"),
-            KeyboardButton(text="💤 وضع السكون"),
+            KeyboardButton(text="🧹 تفريغ DNS"),
+            KeyboardButton(text="📶 تشغيل الواي فاي"),
         ],
         [
-            KeyboardButton(text="📱 لوحة التحكم الكاملة"),
+            KeyboardButton(text="📵 إيقاف الواي فاي"),
+            KeyboardButton(text="🔒 قفل الجهاز"),
+        ],
+        [
+            KeyboardButton(text="💤 وضع السكون"),
+            KeyboardButton(text="🛌 وضع الإسبات"),
+        ],
+        [
+            KeyboardButton(text="🔄 إعادة التشغيل"),
+            KeyboardButton(text="🛑 إطفاء الجهاز"),
+        ],
+        [
+            KeyboardButton(text="🎛️ لوحة التحكم الكاملة"),
         ],
     ],
     resize_keyboard=True,
@@ -203,6 +223,7 @@ async def cmd_start(message: Message):
     )
 
 
+@dp.message(F.text == "🎛️ لوحة التحكم الكاملة")
 @dp.message(F.text == "📱 لوحة التحكم الكاملة")
 @dp.message(F.text == "📱 لوحة التحكم بالأزرار")
 @dp.message(Command("menu"))
@@ -218,7 +239,7 @@ async def cmd_menu(message: Message):
     )
 
 
-# ─── أزرار الكيبورد الثابت في الأسفل ────────────────────────────────────────
+# ─── أزرار الكيبورد الثابت في الأسفل — كل الأوامر ─────────────────────────
 
 @dp.message(F.text == "📸 لقطة شاشة")
 async def kb_screenshot(message: Message):
@@ -227,6 +248,22 @@ async def kb_screenshot(message: Message):
 @dp.message(F.text == "📊 حالة الجهاز")
 async def kb_status(message: Message):
     await send_command_and_wait(message, "status")
+
+@dp.message(F.text == "🔋 البطارية")
+async def kb_battery(message: Message):
+    await send_command_and_wait(message, "battery")
+
+@dp.message(F.text == "⚡ العمليات والرام")
+async def kb_processes(message: Message):
+    await send_command_and_wait(message, "processes")
+
+@dp.message(F.text == "🌐 الشبكة")
+async def kb_network(message: Message):
+    await send_command_and_wait(message, "network")
+
+@dp.message(F.text == "📡 تفاصيل الشبكة")
+async def kb_netinfo(message: Message):
+    await send_command_and_wait(message, "netinfo")
 
 @dp.message(F.text == "🌑 إطفاء الشاشة")
 async def kb_monitoroff(message: Message):
@@ -244,6 +281,18 @@ async def kb_mute(message: Message):
 async def kb_unmute(message: Message):
     await send_command_and_wait(message, "unmute")
 
+@dp.message(F.text == "🧹 تفريغ DNS")
+async def kb_flushdns(message: Message):
+    await send_command_and_wait(message, "flushdns")
+
+@dp.message(F.text == "📶 تشغيل الواي فاي")
+async def kb_wifi_on(message: Message):
+    await send_command_and_wait(message, "wifi", {"state": "on"})
+
+@dp.message(F.text == "📵 إيقاف الواي فاي")
+async def kb_wifi_off(message: Message):
+    await send_command_and_wait(message, "wifi", {"state": "off"})
+
 @dp.message(F.text == "🔒 قفل الجهاز")
 async def kb_lock(message: Message):
     await send_command_and_wait(message, "lock")
@@ -252,6 +301,17 @@ async def kb_lock(message: Message):
 async def kb_sleep(message: Message):
     await send_command_and_wait(message, "sleep")
 
+@dp.message(F.text == "🛌 وضع الإسبات")
+async def kb_hibernate(message: Message):
+    await send_command_and_wait(message, "hibernate")
+
+@dp.message(F.text == "🔄 إعادة التشغيل")
+async def kb_restart(message: Message):
+    await send_command_and_wait(message, "restart")
+
+@dp.message(F.text == "🛑 إطفاء الجهاز")
+async def kb_shutdown(message: Message):
+    await send_command_and_wait(message, "shutdown")
 
 
 
@@ -317,7 +377,19 @@ async def _watch_delayed_command(chat_id: int, cmd_id: int):
 async def send_command_and_wait(message: Message, command: str, args: dict = None):
     user = require_paired(message.chat.id)
     if not user:
-        await message.answer("❌ مفيش جهاز مربوط. ابعت /start عشان تربط جهاز الأول.")
+        await message.answer(
+            "🔴 *مفيش جهاز مربوط بحسابك!*\n\n"
+            "📥 *خطوات الربط:*\n\n"
+            "1️⃣ حمّل البرنامج على جهازك:\n"
+            "`PCAgent.exe` — من مجلد dist في المشروع\n\n"
+            "2️⃣ شغّل `PCAgent.exe` بدبل كليك\n\n"
+            "3️⃣ هتظهرلك نافذة — ابعت هنا:\n"
+            "/start\n"
+            "وهيجيلك كود من 6 أرقام\n\n"
+            "4️⃣ اكتب الكود في النافذة اللي فتحت على جهازك\n\n"
+            "5️⃣ *خلص!* البرنامج هيشتغل في الخلفية تلقائياً 🎉",
+            parse_mode="Markdown",
+        )
         return
 
     cmd_id = db.push_command(user["device_id"], command, args)
