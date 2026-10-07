@@ -35,12 +35,30 @@ dp = Dispatcher()
 
 db.init_db()
 
-# زرار القائمة الدائم في الكيبورد من تحت
+# الكيبورد الثابت في الأسفل — أزرار سريعة للأوامر الأكثر استخداماً
 MAIN_REPLY_KEYBOARD = ReplyKeyboardMarkup(
     keyboard=[
-        [KeyboardButton(text="📱 لوحة التحكم بالأزرار")],
+        [
+            KeyboardButton(text="📸 لقطة شاشة"),
+            KeyboardButton(text="📊 حالة الجهاز"),
+        ],
+        [
+            KeyboardButton(text="🌑 إطفاء الشاشة"),
+            KeyboardButton(text="☀️ تشغيل الشاشة"),
+        ],
+        [
+            KeyboardButton(text="🔇 كتم الصوت"),
+            KeyboardButton(text="🔔 فك الكتم"),
+        ],
+        [
+            KeyboardButton(text="🔒 قفل الجهاز"),
+            KeyboardButton(text="💤 وضع السكون"),
+        ],
+        [
+            KeyboardButton(text="📱 لوحة التحكم الكاملة"),
+        ],
     ],
-    resize_keyboard=True
+    resize_keyboard=True,
 )
 
 def get_main_menu_keyboard():
@@ -84,9 +102,6 @@ def get_main_menu_keyboard():
         [
             InlineKeyboardButton(text="💤 وضع السكون (Sleep)", callback_data="btn_sleep"),
             InlineKeyboardButton(text="🛌 وضع الإسبات (Hibernate)", callback_data="btn_hibernate"),
-        ],
-        [
-            InlineKeyboardButton(text="⚡ تشغيل الكمبيوتر (Wake on LAN)", callback_data="btn_wakeonlan"),
         ],
         [
             InlineKeyboardButton(text="🔄 إعادة التشغيل", callback_data="btn_restart"),
@@ -188,6 +203,7 @@ async def cmd_start(message: Message):
     )
 
 
+@dp.message(F.text == "📱 لوحة التحكم الكاملة")
 @dp.message(F.text == "📱 لوحة التحكم بالأزرار")
 @dp.message(Command("menu"))
 async def cmd_menu(message: Message):
@@ -200,6 +216,42 @@ async def cmd_menu(message: Message):
         parse_mode="Markdown",
         reply_markup=get_main_menu_keyboard()
     )
+
+
+# ─── أزرار الكيبورد الثابت في الأسفل ────────────────────────────────────────
+
+@dp.message(F.text == "📸 لقطة شاشة")
+async def kb_screenshot(message: Message):
+    await send_command_and_wait(message, "screenshot")
+
+@dp.message(F.text == "📊 حالة الجهاز")
+async def kb_status(message: Message):
+    await send_command_and_wait(message, "status")
+
+@dp.message(F.text == "🌑 إطفاء الشاشة")
+async def kb_monitoroff(message: Message):
+    await send_command_and_wait(message, "monitoroff")
+
+@dp.message(F.text == "☀️ تشغيل الشاشة")
+async def kb_monitoron(message: Message):
+    await send_command_and_wait(message, "monitoron")
+
+@dp.message(F.text == "🔇 كتم الصوت")
+async def kb_mute(message: Message):
+    await send_command_and_wait(message, "mute")
+
+@dp.message(F.text == "🔔 فك الكتم")
+async def kb_unmute(message: Message):
+    await send_command_and_wait(message, "unmute")
+
+@dp.message(F.text == "🔒 قفل الجهاز")
+async def kb_lock(message: Message):
+    await send_command_and_wait(message, "lock")
+
+@dp.message(F.text == "💤 وضع السكون")
+async def kb_sleep(message: Message):
+    await send_command_and_wait(message, "sleep")
+
 
 
 
@@ -283,8 +335,12 @@ async def send_command_and_wait(message: Message, command: str, args: dict = Non
             return
         await asyncio.sleep(0.5)
 
+    # الجهاز مش بيرد = مش مربوط أو مش شغال
     await wait_msg.edit_text(
-        "⌛ الجهاز اتأخر في الرد، الأمر بيتنفذ وهيتبعتلك الرد هنا أول ما يخلص فوراً..."
+        "🔴 الجهاز مش بيرد!\n\n"
+        "• تأكد إن برنامج الـ Agent شغال على الكمبيوتر\n"
+        "• أو شغّل `run_agent.bat` على الجهاز\n\n"
+        "📡 هيوصلك الرد تلقائياً لو الجهاز اتصل."
     )
     asyncio.create_task(_watch_delayed_command(message.chat.id, cmd_id))
 
