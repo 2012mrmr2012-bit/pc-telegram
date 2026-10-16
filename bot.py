@@ -8,9 +8,11 @@ bot.py - بوت تليجرام للتحكم عن بعد في الأجهزة ال
   2) شغّل uvicorn api:app --host 0.0.0.0 --port 8000 (في تيرمنال منفصل)
 """
 import asyncio
+import hashlib
+import json
+import logging
 import os
 import time
-import logging
 
 from aiogram import Bot, Dispatcher, F
 from aiogram.filters import Command
