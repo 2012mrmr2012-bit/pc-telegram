@@ -39,16 +39,20 @@ db.init_db()
 MAIN_REPLY_KEYBOARD = ReplyKeyboardMarkup(
     keyboard=[
         [
+            KeyboardButton(text="📁 متصفح الملفات"),
             KeyboardButton(text="📸 لقطة شاشة"),
-            KeyboardButton(text="📊 حالة الجهاز"),
         ],
         [
-            KeyboardButton(text="🔋 البطارية"),
+            KeyboardButton(text="📊 حالة الجهاز"),
             KeyboardButton(text="⚡ العمليات والرام"),
         ],
         [
+            KeyboardButton(text="📋 قراءة الحافظة"),
+            KeyboardButton(text="⏯️ تشغيل/إيقاف مؤقت"),
+        ],
+        [
+            KeyboardButton(text="🔋 البطارية"),
             KeyboardButton(text="🌐 الشبكة"),
-            KeyboardButton(text="📡 تفاصيل الشبكة"),
         ],
         [
             KeyboardButton(text="🌑 إطفاء الشاشة"),
@@ -85,23 +89,28 @@ def get_main_menu_keyboard():
     """لوحة التحكم الرئيسية بالعربي (Inline Buttons)."""
     kb = [
         [
+            InlineKeyboardButton(text="📁 متصفح الملفات والتحميل", callback_data="btn_browse"),
+            InlineKeyboardButton(text="📸 لقطة شاشة", callback_data="btn_screenshot"),
+        ],
+        [
+            InlineKeyboardButton(text="📋 قراءة الحافظة", callback_data="btn_clip"),
+            InlineKeyboardButton(text="⏯️ تشغيل/إيقاف مؤقت", callback_data="btn_playpause"),
+        ],
+        [
             InlineKeyboardButton(text="📊 حالة الجهاز", callback_data="btn_status"),
             InlineKeyboardButton(text="🔋 البطارية", callback_data="btn_battery"),
         ],
         [
-            InlineKeyboardButton(text="📸 لقطة شاشة", callback_data="btn_screenshot"),
             InlineKeyboardButton(text="⚡ العمليات والرام", callback_data="btn_processes"),
+            InlineKeyboardButton(text="☀️ ضبط السطوع", callback_data="menu_brightness"),
         ],
         [
-            InlineKeyboardButton(text="☀️ ضبط السطوع", callback_data="menu_brightness"),
             InlineKeyboardButton(text="🔊 مستوى الصوت", callback_data="menu_volume"),
+            InlineKeyboardButton(text="🔄 مدخل الشاشة", callback_data="menu_switch"),
         ],
         [
             InlineKeyboardButton(text="🔇 كتم الصوت", callback_data="btn_mute"),
             InlineKeyboardButton(text="🔔 تشغيل الصوت", callback_data="btn_unmute"),
-        ],
-        [
-            InlineKeyboardButton(text="🔄 مدخل الشاشة (DP / HDMI)", callback_data="menu_switch"),
         ],
         [
             InlineKeyboardButton(text="🌑 إطفاء / سكون الشاشة", callback_data="btn_monitoroff"),
@@ -129,6 +138,7 @@ def get_main_menu_keyboard():
         ],
     ]
     return InlineKeyboardMarkup(inline_keyboard=kb)
+
 
 
 def send_wake_on_lan(mac_address: str, broadcast_ip: str = "255.255.255.255", port: int = 9):
@@ -239,7 +249,132 @@ async def cmd_menu(message: Message):
     )
 
 
+
+# ─── ذاكرة تخزين مؤقت لمسارات الملفات لتفادي تجاوز 64 بايت في كولباك تليجرام ───
+PATH_CACHE = {}
+
+def cache_path(p: str) -> str:
+    import hashlib
+    cid = hashlib.md5(p.encode("utf-8", "ignore")).hexdigest()[:8]
+    PATH_CACHE[cid] = p
+    return cid
+
+def get_cached_path(cid: str) -> str:
+    return PATH_CACHE.get(cid, "")
+
+
+async def show_file_browser(event, path: str = "", page: int = 0, is_callback: bool = False):
+    chat_id = event.chat.id if hasattr(event, "chat") else event.message.chat.id
+    user = require_paired(chat_id)
+    if not user:
+        msg_text = "🔴 *مفيش جهاز مربوط بحسابك!*"
+        if is_callback:
+            await event.answer(msg_text, show_alert=True)
+        else:
+            await event.answer(msg_text, parse_mode="Markdown")
+        return
+
+    cmd_id = db.push_command(user["device_id"], "browse", {"path": path})
+    if not is_callback:
+        wait_m = await event.answer("⏳ جاري استعراض محتويات الكمبيوتر...")
+    else:
+        await event.answer("⏳ جاري الفتح...")
+        wait_m = event.message
+
+    deadline = time.time() + 15
+    res_data = None
+    while time.time() < deadline:
+        row = db.get_command(cmd_id)
+        if row and row["status"] != "pending":
+            if row["status"] == "done":
+                try:
+                    res_data = json.loads(row["result"])
+                except Exception:
+                    pass
+            break
+        await asyncio.sleep(0.5)
+
+    if not res_data or "error" in res_data:
+        err = res_data.get("error", "لم يستجب الجهاز أو حدث خطأ.") if res_data else "الجهاز لا يستجيب."
+        await wait_m.edit_text(f"⚠️ {err}")
+        return
+
+    kb = []
+    if res_data.get("is_root"):
+        text = "📂 *متصفح ملفات الكمبيوتر*\n\nاختر القرص أو مجلد الوصول السريع للبدء:"
+        d_row = []
+        for d in res_data.get("drives", []):
+            cid = cache_path(d)
+            d_row.append(InlineKeyboardButton(text=f"💽 قرص ({d.rstrip(r'\/')})", callback_data=f"bf:{cid}"))
+            if len(d_row) == 2:
+                kb.append(d_row)
+                d_row = []
+        if d_row:
+            kb.append(d_row)
+
+        for q in res_data.get("quick", []):
+            cid = cache_path(q["path"])
+            kb.append([InlineKeyboardButton(text=q["name"], callback_data=f"bf:{cid}")])
+    else:
+        curr_p = res_data["current_path"]
+        parent_p = res_data.get("parent_path", "")
+        folders = res_data.get("folders", [])
+        files = res_data.get("files", [])
+
+        text = (
+            f"📂 *المسار الحالي:*\n`{curr_p}`\n\n"
+            f"📁 مجلدات: {res_data.get('total_folders', len(folders))} | 📄 ملفات: {res_data.get('total_files', len(files))}\n"
+            f"_(اضغط على مجلد للدخول إليه أو ملف لتحميله مباشرة)_"
+        )
+
+        top_row = [InlineKeyboardButton(text="🏠 قائمة الأقراص", callback_data="br")]
+        if parent_p:
+            p_cid = cache_path(parent_p)
+            top_row.append(InlineKeyboardButton(text="⬆️ للأعلى", callback_data=f"bf:{p_cid}"))
+        kb.append(top_row)
+
+        PER_PAGE = 8
+        all_items = [("f", f) for f in folders] + [("d", fl) for fl in files]
+        total_pages = max(1, (len(all_items) + PER_PAGE - 1) // PER_PAGE)
+        page = max(0, min(page, total_pages - 1))
+        page_items = all_items[page * PER_PAGE : (page + 1) * PER_PAGE]
+
+        for itype, item in page_items:
+            if itype == "f":
+                fpath = os.path.join(curr_p, item)
+                cid = cache_path(fpath)
+                kb.append([InlineKeyboardButton(text=f"📁 {item[:28]}", callback_data=f"bf:{cid}")])
+            else:
+                fpath = os.path.join(curr_p, item["name"])
+                cid = cache_path(fpath)
+                kb.append([InlineKeyboardButton(text=f"📄 {item['name'][:22]} ({item['size']})", callback_data=f"bd:{cid}")])
+
+        if total_pages > 1:
+            nav_row = []
+            curr_cid = cache_path(curr_p)
+            if page > 0:
+                nav_row.append(InlineKeyboardButton(text="◀️ السابق", callback_data=f"bp:{curr_cid}:{page-1}"))
+            nav_row.append(InlineKeyboardButton(text=f"{page+1}/{total_pages}", callback_data="noop"))
+            if page < total_pages - 1:
+                nav_row.append(InlineKeyboardButton(text="التالي ▶️", callback_data=f"bp:{curr_cid}:{page+1}"))
+            kb.append(nav_row)
+
+    await wait_m.edit_text(text, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
+
+
 # ─── أزرار الكيبورد الثابت في الأسفل — كل الأوامر ─────────────────────────
+
+@dp.message(F.text == "📁 متصفح الملفات")
+async def kb_browse(message: Message):
+    await show_file_browser(message, "")
+
+@dp.message(F.text == "📋 قراءة الحافظة")
+async def kb_getclip(message: Message):
+    await send_command_and_wait(message, "getclip")
+
+@dp.message(F.text == "⏯️ تشغيل/إيقاف مؤقت")
+async def kb_media(message: Message):
+    await send_command_and_wait(message, "media", {"action": "playpause"})
 
 @dp.message(F.text == "📸 لقطة شاشة")
 async def kb_screenshot(message: Message):
@@ -252,6 +387,7 @@ async def kb_status(message: Message):
 @dp.message(F.text == "🔋 البطارية")
 async def kb_battery(message: Message):
     await send_command_and_wait(message, "battery")
+
 
 @dp.message(F.text == "⚡ العمليات والرام")
 async def kb_processes(message: Message):
@@ -319,6 +455,14 @@ async def kb_shutdown(message: Message):
 async def cmd_help(message: Message):
     await message.answer(
         "📋 *الأوامر المتاحة بعد الربط:*\n\n"
+        "📁 *الملفات والتنزيل*\n"
+        "/files أو /browse - متصفح ملفات الكمبيوتر بالكامل\n"
+        "/get <مسار_الملف> - تحميل ملف محدد مباشرة للهاتف\n"
+        "📥 _يمكنك إرسال أي صورة أو ملف للبوت وسيتم حفظه في Downloads بالكمبيوتر_\n\n"
+        "📋 *الحافظة والوسائط*\n"
+        "/clip - قراءة النص المنسوخ حالياً في كمبيوترك\n"
+        "/setclip <نص> - نسخ نص من الهاتف إلى كمبيوترك\n"
+        "/play أو /pause - تشغيل / إيقاف مؤقت للوسائط والأغاني\n\n"
         "🖥️ *معلومات وحالة الجهاز*\n"
         "/status - حالة الجهاز (CPU/RAM/تخزين)\n"
         "/network - عناوين IP للشبكة\n"
@@ -352,10 +496,87 @@ async def cmd_help(message: Message):
     )
 
 
+@dp.message(Command("files"))
+@dp.message(Command("browse"))
+async def cmd_browse(message: Message):
+    await show_file_browser(message, "")
+
+
+@dp.message(Command("get"))
+async def cmd_get(message: Message):
+    parts = message.text.split(maxsplit=1)
+    if len(parts) < 2:
+        await message.answer("⚠️ يرجى كتابة مسار الملف بعد الأمر:\nمثال:\n`/get C:\\Users\\hp\\Desktop\\photo.png`", parse_mode="Markdown")
+        return
+    await send_command_and_wait(message, "sendfile", {"path": parts[1].strip()})
+
+
+@dp.message(Command("clip"))
+async def cmd_clip(message: Message):
+    await send_command_and_wait(message, "getclip")
+
+
+@dp.message(Command("setclip"))
+async def cmd_setclip(message: Message):
+    parts = message.text.split(maxsplit=1)
+    if len(parts) < 2:
+        await message.answer("⚠️ يرجى كتابة النص المراد نسخه في حافظة الكمبيوتر:\nمثال:\n`/setclip كلمة السر هنا`", parse_mode="Markdown")
+        return
+    await send_command_and_wait(message, "setclip", {"text": parts[1].strip()})
+
+
+@dp.message(Command("play"))
+@dp.message(Command("pause"))
+async def cmd_play(message: Message):
+    await send_command_and_wait(message, "media", {"action": "playpause"})
+
+
+# ─── استقبال أي ملف أو صورة وإرسالها لحفظها على الكمبيوتر ───────────────────
+@dp.message(F.document | F.photo | F.audio | F.video)
+async def handle_incoming_file(message: Message):
+    user = require_paired(message.chat.id)
+    if not user:
+        return
+    file_id = None
+    file_name = "file"
+    if message.document:
+        file_id = message.document.file_id
+        file_name = message.document.file_name or "document"
+    elif message.photo:
+        file_id = message.photo[-1].file_id
+        file_name = f"photo_{int(time.time())}.jpg"
+    elif message.audio:
+        file_id = message.audio.file_id
+        file_name = message.audio.file_name or f"audio_{int(time.time())}.mp3"
+    elif message.video:
+        file_id = message.video.file_id
+        file_name = message.video.file_name or f"video_{int(time.time())}.mp4"
+
+    if file_id:
+        wait_m = await message.answer("⏳ جاري تنزيل وحفظ الملف على جهاز الكمبيوتر...")
+        try:
+            tg_file = await bot.get_file(file_id)
+            cmd_id = db.push_command(user["device_id"], "savefile", {
+                "file_path": tg_file.file_path,
+                "file_name": file_name,
+            })
+            deadline = time.time() + 45
+            while time.time() < deadline:
+                row = db.get_command(cmd_id)
+                if row and row["status"] != "pending":
+                    await wait_m.edit_text(row["result"])
+                    return
+                await asyncio.sleep(0.5)
+            await wait_m.edit_text("⏳ تم إرسال الملف للكمبيوتر وجاري حفظه في مجلد التنزيلات (Downloads).")
+        except Exception as e:
+            await wait_m.edit_text(f"⚠️ تعذر استلام وحفظ الملف: {e}")
+
+
 @dp.message(Command("unpair"))
 async def cmd_unpair(message: Message):
     db.unpair(message.chat.id)
     await message.answer("🔓 تم فك الربط مع الجهاز.")
+
 
 
 POLL_WAIT_SECONDS = 15  # أد ايه البوت يستنى نتيجة الأمر مباشرة
@@ -674,7 +895,50 @@ async def handle_callback_buttons(callback: CallbackQuery):
         return
 
 
-    # 5. الأوامر المباشرة من الأزرار
+    # 5. متصفح الملفات والتحميل والوسائط
+    if data == "br":
+        await show_file_browser(callback, "", is_callback=True)
+        return
+
+    if data.startswith("bf:"):
+        cid = data.split(":", 1)[1]
+        path = get_cached_path(cid)
+        await show_file_browser(callback, path, is_callback=True)
+        return
+
+    if data.startswith("bp:"):
+        _, cid, page_str = data.split(":", 2)
+        path = get_cached_path(cid)
+        await show_file_browser(callback, path, page=int(page_str), is_callback=True)
+        return
+
+    if data.startswith("bd:"):
+        cid = data.split(":", 1)[1]
+        path = get_cached_path(cid)
+        await callback.answer("⏳ جاري إرسال الملف لتليجرام...")
+        await send_command_and_wait(callback.message, "sendfile", {"path": path})
+        return
+
+    if data == "noop":
+        await callback.answer()
+        return
+
+    if data == "btn_browse":
+        await show_file_browser(callback, "", is_callback=True)
+        return
+
+    if data == "btn_clip":
+        await callback.answer("⏳ جاري قراءة الحافظة...")
+        await send_command_and_wait(callback.message, "getclip")
+        return
+
+    if data == "btn_playpause":
+        await callback.answer("⏳ جاري التنفيذ...")
+        await send_command_and_wait(callback.message, "media", {"action": "playpause"})
+        return
+
+
+    # 6. الأوامر المباشرة من الأزرار
     cmd_map = {
         "btn_status": ("status", None),
         "btn_battery": ("battery", None),
@@ -703,6 +967,7 @@ async def handle_callback_buttons(callback: CallbackQuery):
         return
 
     await callback.answer()
+
 
 
 async def main():

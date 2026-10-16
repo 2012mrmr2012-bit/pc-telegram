@@ -277,7 +277,9 @@ def push_command(device_id: str, command: str, args: dict = None) -> int:
 
 
 def pop_pending_commands(device_id: str, limit: int = 5):
+    cutoff = time.time() - 180  # تجاهل وإلغاء أي أمر أقدم من 3 دقائق منعاً للتكرار
     if USE_POSTGRES:
+        _pg_exec("UPDATE commands SET status = 'expired' WHERE device_id = %s AND status = 'pending' AND created_at < %s", (device_id, cutoff))
         return _pg_exec(
             "SELECT * FROM commands WHERE device_id = %s AND status = 'pending' ORDER BY id ASC LIMIT %s",
             (device_id, limit),
@@ -285,6 +287,7 @@ def pop_pending_commands(device_id: str, limit: int = 5):
         ) or []
     else:
         with get_conn() as conn:
+            conn.execute("UPDATE commands SET status = 'expired' WHERE device_id = ? AND status = 'pending' AND created_at < ?", (device_id, cutoff))
             return conn.execute(
                 """SELECT * FROM commands WHERE device_id = ? AND status = 'pending'
                    ORDER BY id ASC LIMIT ?""",
