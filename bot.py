@@ -283,19 +283,25 @@ async def show_file_browser(event, path: str = "", page: int = 0, is_callback: b
 
     deadline = time.time() + 15
     res_data = None
+    last_status = "pending"
     while time.time() < deadline:
         row = db.get_command(cmd_id)
         if row and row["status"] != "pending":
+            last_status = row["status"]
             if row["status"] == "done":
                 try:
                     res_data = json.loads(row["result"])
-                except Exception:
-                    pass
+                except Exception as ex:
+                    res_data = {"error": f"خطأ في قراءة بيانات الرد: {ex}"}
+            elif row["status"] == "error":
+                res_data = {"error": row.get("result") or "فشل تنفيذ الأمر على الكمبيوتر."}
+            elif row["status"] == "expired":
+                res_data = {"error": "انتهت صلاحية الأمر المعلق."}
             break
         await asyncio.sleep(0.5)
 
     if not res_data or "error" in res_data:
-        err = res_data.get("error", "لم يستجب الجهاز أو حدث خطأ.") if res_data else "الجهاز لا يستجيب."
+        err = res_data.get("error") if res_data else f"الجهاز لم يستجب في الوقت المحدد (الحالة: {last_status})."
         await wait_m.edit_text(f"⚠️ {err}")
         return
 
