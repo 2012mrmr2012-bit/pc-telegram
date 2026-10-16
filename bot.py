@@ -541,6 +541,11 @@ async def cmd_play(message: Message):
     await send_command_and_wait(message, "media", {"action": "playpause"})
 
 
+@dp.message(Command("cancelupload"))
+async def cmd_cancelupload(message: Message):
+    await send_command_and_wait(message, "cancelupload")
+
+
 # ─── استقبال أي ملف أو صورة وإرسالها لحفظها على الكمبيوتر ───────────────────
 @dp.message(F.document | F.photo | F.audio | F.video)
 async def handle_incoming_file(message: Message):
@@ -927,6 +932,11 @@ async def handle_callback_buttons(callback: CallbackQuery):
         path = get_cached_path(cid)
         await callback.answer("⏳ جاري إرسال الملف لتليجرام...")
         await send_command_and_wait(callback.message, "sendfile", {"path": path})
+        return
+
+    if data == "cancel_upload":
+        await callback.answer("🛑 جاري إلغاء الرفع...")
+        await send_command_and_wait(callback.message, "cancelupload")
         return
 
     if data == "noop":
