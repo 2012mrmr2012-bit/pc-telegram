@@ -305,12 +305,14 @@ async def show_file_browser(event, path: str = "", page: int = 0, is_callback: b
         d_row = []
         for d in res_data.get("drives", []):
             cid = cache_path(d)
-            d_row.append(InlineKeyboardButton(text=f"💽 قرص ({d.rstrip(r'\/')})", callback_data=f"bf:{cid}"))
+            d_name = d.replace("\\", "").replace("/", "")
+            d_row.append(InlineKeyboardButton(text=f"💽 قرص ({d_name})", callback_data=f"bf:{cid}"))
             if len(d_row) == 2:
                 kb.append(d_row)
                 d_row = []
         if d_row:
             kb.append(d_row)
+
 
         for q in res_data.get("quick", []):
             cid = cache_path(q["path"])
